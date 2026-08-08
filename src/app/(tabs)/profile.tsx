@@ -1,5 +1,4 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import {
   Pressable,
@@ -10,7 +9,9 @@ import {
 } from 'react-native';
 
 import { PrimaryButton } from '../../components/PrimaryButton';
+import { LibrarySyncNotice } from '../../components/LibrarySyncNotice';
 import { Screen } from '../../components/Screen';
+import { getAuthErrorMessage, useAuth } from '../../context/AuthContext';
 import { useLibrary } from '../../context/LibraryContext';
 import { INTERESTS } from '../../data/books';
 import { colors, radii, spacing, typography } from '../../theme';
@@ -34,7 +35,7 @@ function Stat({
 }
 
 export default function ProfileScreen() {
-  const router = useRouter();
+  const { signOut } = useAuth();
   const {
     displayName,
     resetLibrary,
@@ -43,6 +44,22 @@ export default function ProfileScreen() {
     toggleInterest,
   } = useLibrary();
   const [remindersEnabled, setRemindersEnabled] = useState(true);
+  const [signingOut, setSigningOut] = useState(false);
+  const [signOutError, setSignOutError] = useState('');
+
+  const handleSignOut = async () => {
+    setSigningOut(true);
+    setSignOutError('');
+
+    try {
+      await signOut();
+      resetLibrary();
+    } catch (error) {
+      setSignOutError(getAuthErrorMessage(error));
+    } finally {
+      setSigningOut(false);
+    }
+  };
   const initials =
     displayName
       .split(/\s+/)
@@ -71,6 +88,8 @@ export default function ProfileScreen() {
             <Text style={styles.headerBadgeText}>FIRST EDITION</Text>
           </View>
         </View>
+
+        <LibrarySyncNotice style={styles.syncNotice} />
 
         <View style={styles.identityCard}>
           <View style={styles.avatarHalo}>
@@ -217,14 +236,16 @@ export default function ProfileScreen() {
         <PrimaryButton
           icon="log-out-outline"
           label="Sign out"
-          onPress={() => {
-            resetLibrary();
-            router.dismissAll();
-            requestAnimationFrame(() => router.replace('/'));
-          }}
+          loading={signingOut}
+          onPress={handleSignOut}
           style={styles.signOut}
           variant="secondary"
         />
+        {signOutError ? (
+          <Text accessibilityLiveRegion="polite" style={styles.signOutError}>
+            {signOutError}
+          </Text>
+        ) : null}
         <Text style={styles.version}>Slidebook · First edition</Text>
       </View>
     </Screen>
@@ -284,6 +305,9 @@ const styles = StyleSheet.create({
     marginTop: spacing.lg,
     overflow: 'hidden',
     padding: spacing.lg,
+  },
+  syncNotice: {
+    marginTop: spacing.md,
   },
   avatarHalo: {
     marginBottom: spacing.sm,
@@ -527,6 +551,12 @@ const styles = StyleSheet.create({
   },
   signOut: {
     marginTop: spacing.xl,
+  },
+  signOutError: {
+    ...typography.caption,
+    color: colors.danger,
+    marginTop: spacing.sm,
+    textAlign: 'center',
   },
   version: {
     ...typography.caption,

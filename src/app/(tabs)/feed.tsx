@@ -1,11 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
   FlatList,
   type LayoutChangeEvent,
-  NativeScrollEvent,
-  NativeSyntheticEvent,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
   Platform,
   Pressable,
   ScrollView,
@@ -16,20 +17,79 @@ import {
 } from 'react-native';
 
 import { BookCard } from '../../components/BookCard';
+import { LibrarySyncNotice } from '../../components/LibrarySyncNotice';
+import { LogoMark } from '../../components/LogoMark';
+import { PrimaryButton } from '../../components/PrimaryButton';
 import { Screen } from '../../components/Screen';
 import { useLibrary } from '../../context/LibraryContext';
-import { BOOKS, type Book } from '../../data/books';
+import { INTERESTS } from '../../data/books';
+import { useBookRecommendations } from '../../hooks/useBookRecommendations';
 import { colors, radii, spacing, typography } from '../../theme';
+import type { SaveableBook } from '../../types/database';
+import type { BookRecommendation } from '../../types/recommendations';
 
-type FeedFilter = 'For you' | 'Quick reads' | 'New & notable';
+function saveableBook(book: BookRecommendation): SaveableBook {
+  return {
+    author: book.authors.join(', ').slice(0, 300),
+    coverUrl: (book.thumbnail ?? '').slice(0, 2048),
+    googleBookId: book.googleBookId.slice(0, 256),
+    title: book.title.slice(0, 300),
+  };
+}
 
-const FILTERS: FeedFilter[] = ['For you', 'Quick reads', 'New & notable'];
+interface FeedStatusProps {
+  actionLabel: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  isLoading?: boolean;
+  message: string;
+  onAction: () => void;
+  title: string;
+}
+
+function FeedStatus({
+  actionLabel,
+  icon,
+  isLoading = false,
+  message,
+  onAction,
+  title,
+}: FeedStatusProps) {
+  return (
+    <View style={styles.statusPanel}>
+      <View style={styles.statusIcon}>
+        {isLoading ? (
+          <ActivityIndicator color={colors.violet} size="small" />
+        ) : (
+          <Ionicons color={colors.violet} name={icon} size={28} />
+        )}
+      </View>
+      <Text style={styles.statusTitle}>{title}</Text>
+      <Text style={styles.statusMessage}>{message}</Text>
+      {!isLoading ? (
+        <PrimaryButton
+          label={actionLabel}
+          onPress={onAction}
+          style={styles.statusButton}
+        />
+      ) : null}
+    </View>
+  );
+}
 
 export default function FeedScreen() {
   const router = useRouter();
   const { height } = useWindowDimensions();
-  const { displayName, isSaved, selectedInterests, toggleSaved } = useLibrary();
-  const [activeFilter, setActiveFilter] = useState<FeedFilter>('For you');
+  const {
+    displayName,
+    isLibraryLoading,
+    isSaved,
+    selectedInterests,
+    toggleSaved,
+  } = useLibrary();
+  const { books, error, isLoading, refresh } = useBookRecommendations(
+    selectedInterests,
+    !isLibraryLoading,
+  );
   const [visibleIndex, setVisibleIndex] = useState(0);
   const [listHeight, setListHeight] = useState(0);
 
@@ -48,29 +108,20 @@ export default function FeedScreen() {
       .map((part) => part.charAt(0))
       .join('')
       .toUpperCase() || 'R';
+  const interestLabels = useMemo(
+    () =>
+      selectedInterests.map(
+        (interestId) =>
+          INTERESTS.find((interest) => interest.id === interestId)?.label ??
+          interestId,
+      ),
+    [selectedInterests],
+  );
+  const bookKey = books.map((book) => book.googleBookId).join('\u001f');
 
-  const books = useMemo(() => {
-    const items = [...BOOKS];
-
-    if (activeFilter === 'Quick reads') {
-      return items.sort((a, b) => a.pages - b.pages);
-    }
-    if (activeFilter === 'New & notable') {
-      return items.sort(
-        (a, b) => b.publishedYear - a.publishedYear || b.rating - a.rating,
-      );
-    }
-
-    return items.sort((a, b) => {
-      const aMatches = a.genres.filter((genre) =>
-        selectedInterests.includes(genre),
-      ).length;
-      const bMatches = b.genres.filter((genre) =>
-        selectedInterests.includes(genre),
-      ).length;
-      return bMatches - aMatches || b.rating - a.rating;
-    });
-  }, [activeFilter, selectedInterests]);
+  useEffect(() => {
+    setVisibleIndex(0);
+  }, [bookKey]);
 
   const trackVisibleCard = (
     event: NativeSyntheticEvent<NativeScrollEvent>,
@@ -88,16 +139,18 @@ export default function FeedScreen() {
     }
   };
 
-  const renderBook = ({ item }: { item: Book }) => (
+  const renderBook = ({ item }: { item: BookRecommendation }) => (
     <View style={styles.cardFrame}>
       <BookCard
         book={item}
         cardHeight={cardHeight}
-        onToggleSaved={() => toggleSaved(item.id)}
-        saved={isSaved(item.id)}
+        onToggleSaved={() => toggleSaved(saveableBook(item))}
+        saved={isSaved(item.googleBookId)}
       />
     </View>
   );
+
+  const showLoading = isLibraryLoading || isLoading;
 
   return (
     <Screen padded={false}>
@@ -105,9 +158,7 @@ export default function FeedScreen() {
         <View style={styles.header}>
           <View>
             <View style={styles.wordmarkRow}>
-              <View style={styles.miniMark}>
-                <Ionicons color={colors.white} name="book-outline" size={15} />
-              </View>
+              <LogoMark size={28} style={styles.miniMark} />
               <Text style={styles.wordmark}>slidebook</Text>
             </View>
             <Text style={styles.heading}>Find your next story.</Text>
@@ -116,83 +167,96 @@ export default function FeedScreen() {
             accessibilityLabel="Open profile"
             accessibilityRole="button"
             onPress={() => router.push('/profile')}
-            style={({ pressed }) => [
-              styles.avatar,
-              pressed && styles.pressed,
-            ]}
+            style={({ pressed }) => [styles.avatar, pressed && styles.pressed]}
           >
             <Text style={styles.avatarText}>{initials}</Text>
           </Pressable>
         </View>
 
-        <View style={styles.filterRow}>
+        <View style={styles.interestRow}>
           <ScrollView
-            contentContainerStyle={styles.filters}
+            contentContainerStyle={styles.interests}
             horizontal
             showsHorizontalScrollIndicator={false}
           >
-            {FILTERS.map((filter) => {
-              const selected = filter === activeFilter;
-
-              return (
-                <Pressable
-                  accessibilityRole="tab"
-                  accessibilityState={{ selected }}
-                  key={filter}
-                  onPress={() => {
-                    setActiveFilter(filter);
-                    setVisibleIndex(0);
-                  }}
-                  style={({ pressed }) => [
-                    styles.filter,
-                    selected && styles.filterSelected,
-                    pressed && styles.pressed,
-                  ]}
-                >
-                  {selected ? (
-                    <Ionicons color={colors.white} name="sparkles" size={14} />
-                  ) : null}
-                  <Text
-                    style={[
-                      styles.filterText,
-                      selected && styles.filterTextSelected,
-                    ]}
-                  >
-                    {filter}
-                  </Text>
-                </Pressable>
-              );
-            })}
+            <View style={[styles.interestPill, styles.interestPillSelected]}>
+              <Ionicons color={colors.white} name="sparkles" size={14} />
+              <Text style={[styles.interestText, styles.interestTextSelected]}>
+                For you
+              </Text>
+            </View>
+            {interestLabels.map((interest) => (
+              <View key={interest} style={styles.interestPill}>
+                <Text style={styles.interestText}>{interest}</Text>
+              </View>
+            ))}
           </ScrollView>
           <View style={styles.counter}>
             <Text style={styles.counterText}>
-              {visibleIndex + 1}/{books.length}
+              {books.length ? visibleIndex + 1 : 0}/{books.length}
             </Text>
           </View>
         </View>
 
+        <LibrarySyncNotice style={styles.syncNotice} />
+
         <View onLayout={measureList} style={styles.listArea}>
-          <FlatList
-            contentContainerStyle={styles.listContent}
-            data={books}
-            decelerationRate={snapEnabled ? 'fast' : 'normal'}
-            getItemLayout={(_, index) => ({
-              index,
-              length: snapInterval,
-              offset: snapInterval * index,
-            })}
-            ItemSeparatorComponent={() => <View style={styles.separator} />}
-            key={activeFilter}
-            keyExtractor={(book) => book.id}
-            onMomentumScrollEnd={trackVisibleCard}
-            onScroll={Platform.OS === 'web' ? trackVisibleCard : undefined}
-            renderItem={renderBook}
-            scrollEventThrottle={Platform.OS === 'web' ? 32 : undefined}
-            showsVerticalScrollIndicator={false}
-            snapToAlignment={snapEnabled ? 'start' : undefined}
-            snapToInterval={snapEnabled ? snapInterval : undefined}
-            windowSize={3}
-          />
+          {showLoading ? (
+            <FeedStatus
+              actionLabel=""
+              icon="sparkles-outline"
+              isLoading
+              message="Searching Google Books using your reading interests."
+              onAction={() => undefined}
+              title="Building your recommendations…"
+            />
+          ) : selectedInterests.length === 0 ? (
+            <FeedStatus
+              actionLabel="Choose interests"
+              icon="options-outline"
+              message="Choose a few genres so Slidebook knows what to recommend."
+              onAction={() => router.push('/interests')}
+              title="Tell us what you love."
+            />
+          ) : error ? (
+            <FeedStatus
+              actionLabel="Try again"
+              icon="cloud-offline-outline"
+              message={error}
+              onAction={refresh}
+              title="Recommendations took a detour."
+            />
+          ) : books.length === 0 ? (
+            <FeedStatus
+              actionLabel="Refresh"
+              icon="search-outline"
+              message="No matching books appeared this time. Try refreshing or adjust your interests."
+              onAction={refresh}
+              title="No books found yet."
+            />
+          ) : (
+            <FlatList
+              contentContainerStyle={styles.listContent}
+              data={books}
+              decelerationRate={snapEnabled ? 'fast' : 'normal'}
+              getItemLayout={(_, index) => ({
+                index,
+                length: snapInterval,
+                offset: snapInterval * index,
+              })}
+              ItemSeparatorComponent={() => <View style={styles.separator} />}
+              key={selectedInterests.join(',')}
+              keyExtractor={(book) => book.googleBookId}
+              onMomentumScrollEnd={trackVisibleCard}
+              onScroll={Platform.OS === 'web' ? trackVisibleCard : undefined}
+              renderItem={renderBook}
+              scrollEventThrottle={Platform.OS === 'web' ? 32 : undefined}
+              showsVerticalScrollIndicator={false}
+              snapToAlignment={snapEnabled ? 'start' : undefined}
+              snapToInterval={snapEnabled ? snapInterval : undefined}
+              windowSize={3}
+            />
+          )}
         </View>
       </View>
     </Screen>
@@ -220,13 +284,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
   },
   miniMark: {
-    alignItems: 'center',
-    backgroundColor: colors.violet,
-    borderRadius: 9,
-    height: 28,
-    justifyContent: 'center',
     transform: [{ rotate: '-4deg' }],
-    width: 28,
   },
   wordmark: {
     color: colors.ink,
@@ -253,7 +311,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '800',
   },
-  filterRow: {
+  interestRow: {
     alignItems: 'center',
     alignSelf: 'center',
     flexDirection: 'row',
@@ -263,11 +321,11 @@ const styles = StyleSheet.create({
     paddingTop: spacing.md,
     width: '100%',
   },
-  filters: {
+  interests: {
     gap: spacing.xs,
     paddingRight: spacing.md,
   },
-  filter: {
+  interestPill: {
     alignItems: 'center',
     backgroundColor: colors.surfaceRaised,
     borderColor: colors.border,
@@ -275,19 +333,19 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     flexDirection: 'row',
     gap: spacing.xxs,
-    minHeight: 44,
+    minHeight: 40,
     paddingHorizontal: spacing.md,
   },
-  filterSelected: {
+  interestPillSelected: {
     backgroundColor: colors.violet,
     borderColor: colors.violet,
   },
-  filterText: {
+  interestText: {
     color: colors.inkMuted,
     fontSize: 12,
     fontWeight: '700',
   },
-  filterTextSelected: {
+  interestTextSelected: {
     color: colors.white,
   },
   counter: {
@@ -298,7 +356,7 @@ const styles = StyleSheet.create({
     marginLeft: 'auto',
     marginRight: spacing.lg,
     minHeight: 32,
-    minWidth: 44,
+    minWidth: 48,
     paddingHorizontal: spacing.xs,
   },
   counterText: {
@@ -307,12 +365,18 @@ const styles = StyleSheet.create({
     fontVariant: ['tabular-nums'],
     fontWeight: '700',
   },
-  listContent: {
-    paddingBottom: spacing.xl,
-    paddingHorizontal: spacing.lg,
+  syncNotice: {
+    alignSelf: 'center',
+    marginBottom: spacing.sm,
+    maxWidth: 572,
+    width: '100%',
   },
   listArea: {
     flex: 1,
+  },
+  listContent: {
+    paddingBottom: spacing.xl,
+    paddingHorizontal: spacing.lg,
   },
   cardFrame: {
     alignSelf: 'center',
@@ -321,6 +385,40 @@ const styles = StyleSheet.create({
   },
   separator: {
     height: spacing.md,
+  },
+  statusPanel: {
+    alignItems: 'center',
+    alignSelf: 'center',
+    flex: 1,
+    justifyContent: 'center',
+    maxWidth: 420,
+    paddingBottom: spacing.xxxl,
+    paddingHorizontal: spacing.lg,
+    width: '100%',
+  },
+  statusIcon: {
+    alignItems: 'center',
+    backgroundColor: colors.violetSoft,
+    borderRadius: 28,
+    height: 58,
+    justifyContent: 'center',
+    marginBottom: spacing.md,
+    width: 58,
+  },
+  statusTitle: {
+    ...typography.heading,
+    color: colors.ink,
+    textAlign: 'center',
+  },
+  statusMessage: {
+    ...typography.body,
+    color: colors.inkMuted,
+    marginTop: spacing.xs,
+    textAlign: 'center',
+  },
+  statusButton: {
+    marginTop: spacing.lg,
+    maxWidth: 240,
   },
   pressed: {
     opacity: 0.7,

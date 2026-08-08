@@ -1,30 +1,30 @@
 import type { TextStyle, ViewStyle } from 'react-native';
 
 /**
- * Slidebook's visual language: warm paper surfaces, plum ink, and a vivid
- * violet accent. Keeping these tokens in one place makes it easy for screens
- * to feel related without sharing large style sheets.
+ * Slidebook's visual language: ivory paper, carved-wood warmth, and soft
+ * brown ink. Keeping these tokens in one place makes it easy for screens to
+ * feel related without sharing large style sheets.
  */
 export const colors = {
-  canvas: '#F7F1E8',
-  surface: '#FFFDF8',
-  surfaceRaised: '#FFFFFF',
-  surfaceMuted: '#EFE7DC',
-  ink: '#251C2E',
-  inkMuted: '#655B69',
-  inkSubtle: '#756B78',
-  violet: '#7351D6',
-  violetDark: '#5135A5',
-  violetSoft: '#E9E0FF',
-  violetWash: '#F2ECFF',
-  blush: '#F2C7C2',
-  sage: '#B9CCB6',
-  amber: '#E8B86B',
-  border: '#E3D9CE',
+  canvas: '#F7EFE3',
+  surface: '#FFF9EF',
+  surfaceRaised: '#FFFCF7',
+  surfaceMuted: '#EFE0CD',
+  ink: '#342417',
+  inkMuted: '#6E5A45',
+  inkSubtle: '#8A7560',
+  violet: '#B87732',
+  violetDark: '#75461F',
+  violetSoft: '#EBCFA8',
+  violetWash: '#FFF0D8',
+  blush: '#EFCDB3',
+  sage: '#C7D1BC',
+  amber: '#D69A45',
+  border: '#E3D0BB',
   white: '#FFFFFF',
-  success: '#39745A',
-  danger: '#B9555E',
-  overlay: 'rgba(37, 28, 46, 0.42)',
+  success: '#557049',
+  danger: '#A94E3D',
+  overlay: 'rgba(52, 36, 23, 0.42)',
 } as const;
 
 export const spacing = {

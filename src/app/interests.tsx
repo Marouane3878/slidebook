@@ -3,6 +3,7 @@ import { useRouter } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { PrimaryButton } from '../components/PrimaryButton';
+import { LibrarySyncNotice } from '../components/LibrarySyncNotice';
 import { Screen } from '../components/Screen';
 import { useLibrary } from '../context/LibraryContext';
 import { INTERESTS } from '../data/books';
@@ -38,6 +39,8 @@ export default function InterestsScreen() {
         <View style={styles.progressTrack}>
           <View style={styles.progressFill} />
         </View>
+
+        <LibrarySyncNotice style={styles.syncNotice} />
 
         <View style={styles.intro}>
           <Text style={styles.eyebrow}>TUNE YOUR PICKS</Text>
@@ -180,6 +183,9 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     height: '100%',
     width: '100%',
+  },
+  syncNotice: {
+    marginTop: spacing.md,
   },
   intro: {
     marginTop: spacing.xl,

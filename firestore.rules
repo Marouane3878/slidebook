@@ -1,0 +1,186 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function validUser(data, userId) {
+      return data.keys().hasAll([
+          'id',
+          'email',
+          'displayName',
+          'photoUrl',
+          'createdAt',
+          'isPremium'
+        ]) &&
+        data.keys().hasOnly([
+          'id',
+          'email',
+          'displayName',
+          'photoUrl',
+          'createdAt',
+          'isPremium'
+        ]) &&
+        data.id == userId &&
+        data.email is string &&
+        data.email == request.auth.token.email &&
+        data.displayName is string &&
+        data.displayName.size() <= 100 &&
+        data.photoUrl is string &&
+        data.photoUrl.size() <= 2048 &&
+        data.createdAt is timestamp &&
+        data.isPremium is bool;
+    }
+
+    match /users/{userId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId) &&
+        validUser(request.resource.data, userId) &&
+        request.resource.data.isPremium == false;
+      allow update: if isOwner(userId) &&
+        validUser(request.resource.data, userId) &&
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['email', 'displayName', 'photoUrl']);
+      allow delete: if false;
+    }
+
+    function validInterests(data, userId) {
+      return data.keys().hasAll(['userId', 'interests']) &&
+        data.keys().hasOnly(['userId', 'interests']) &&
+        data.userId == userId &&
+        data.interests is list &&
+        data.interests.size() <= 12 &&
+        data.interests.hasOnly([
+          'contemporary',
+          'mystery',
+          'romance',
+          'fantasy',
+          'science-fiction',
+          'historical',
+          'memoir',
+          'self-growth',
+          'poetry',
+          'thriller',
+          'nature',
+          'essays'
+        ]);
+    }
+
+    match /userInterests/{userId} {
+      allow read: if isOwner(userId);
+      allow create, update: if isOwner(userId) &&
+        validInterests(request.resource.data, userId);
+      allow delete: if isOwner(userId);
+    }
+
+    function validSavedBook(data) {
+      return data.keys().hasAll([
+          'userId',
+          'googleBookId',
+          'title',
+          'author',
+          'coverUrl',
+          'savedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'userId',
+          'googleBookId',
+          'title',
+          'author',
+          'coverUrl',
+          'savedAt'
+        ]) &&
+        data.userId == request.auth.uid &&
+        data.googleBookId is string &&
+        data.googleBookId.size() > 0 &&
+        data.googleBookId.size() <= 256 &&
+        data.title is string &&
+        data.title.size() > 0 &&
+        data.title.size() <= 300 &&
+        data.author is string &&
+        data.author.size() <= 300 &&
+        data.coverUrl is string &&
+        data.coverUrl.size() <= 2048 &&
+        data.savedAt is timestamp;
+    }
+
+    match /savedBooks/{savedBookId} {
+      allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() &&
+        savedBookId.matches('^' + request.auth.uid + '_.*') &&
+        validSavedBook(request.resource.data);
+      allow update: if false;
+      allow delete: if isSignedIn() &&
+        resource.data.userId == request.auth.uid;
+    }
+
+    // V1 recommendations come from the separate HTTPS backend. This reserved
+    // collection is read-only to clients and does not require Cloud Functions.
+    match /bookRecommendations/{recommendationId} {
+      allow read: if isSignedIn() &&
+        resource.data.userId == request.auth.uid;
+      allow write: if false;
+    }
+
+    function validProfile(data, userId) {
+      return data.keys().hasAll([
+          'userId',
+          'displayName',
+          'photoUrl',
+          'bio',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'userId',
+          'displayName',
+          'photoUrl',
+          'bio',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        data.userId == userId &&
+        data.displayName is string &&
+        data.displayName.size() <= 100 &&
+        data.photoUrl is string &&
+        data.photoUrl.size() <= 2048 &&
+        data.bio is string &&
+        data.bio.size() <= 500 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    match /profiles/{userId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId) &&
+        validProfile(request.resource.data, userId);
+      allow update: if isOwner(userId) &&
+        validProfile(request.resource.data, userId) &&
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['displayName', 'photoUrl', 'bio', 'updatedAt']);
+      allow delete: if false;
+    }
+
+    // Reserved for later versions. These collections stay inaccessible until
+    // their privacy model and validation rules are implemented.
+    match /posts/{document=**} {
+      allow read, write: if false;
+    }
+    match /followers/{document=**} {
+      allow read, write: if false;
+    }
+    match /authorProfiles/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

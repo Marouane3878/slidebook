@@ -9,11 +9,12 @@ import {
   View,
 } from 'react-native';
 
-import { BookCover } from '../../components/BookCover';
+import { BookThumbnail } from '../../components/BookThumbnail';
+import { LibrarySyncNotice } from '../../components/LibrarySyncNotice';
 import { PrimaryButton } from '../../components/PrimaryButton';
 import { Screen } from '../../components/Screen';
 import { useLibrary } from '../../context/LibraryContext';
-import type { Book } from '../../data/books';
+import type { SaveableBook, SavedBookDocument } from '../../types/database';
 import { colors, radii, shadows, spacing, typography } from '../../theme';
 
 function SavedBook({
@@ -21,14 +22,21 @@ function SavedBook({
   coverHeight,
   onRemove,
 }: {
-  book: Book;
+  book: SavedBookDocument;
   coverHeight: number;
   onRemove: () => void;
 }) {
   return (
     <View style={styles.savedItem}>
       <View style={styles.coverShell}>
-        <BookCover book={book} height={coverHeight} style={styles.cover} />
+        <BookThumbnail
+          author={book.author || undefined}
+          borderRadius={radii.lg}
+          height={coverHeight}
+          style={styles.cover}
+          thumbnail={book.coverUrl || null}
+          title={book.title}
+        />
         <Pressable
           accessibilityLabel={`Remove ${book.title} from saved books`}
           accessibilityRole="button"
@@ -46,13 +54,11 @@ function SavedBook({
         {book.title}
       </Text>
       <Text numberOfLines={1} style={styles.bookAuthor}>
-        {book.author}
+        {book.author || 'Author not listed'}
       </Text>
       <View style={styles.bookMeta}>
-        <Ionicons color={colors.amber} name="star" size={13} />
-        <Text style={styles.bookMetaText}>{book.rating.toFixed(1)}</Text>
-        <View style={styles.metaDot} />
-        <Text style={styles.bookMetaText}>{book.pages} pages</Text>
+        <Ionicons color={colors.violet} name="bookmark-outline" size={13} />
+        <Text style={styles.bookMetaText}>Saved to your shelf</Text>
       </View>
     </View>
   );
@@ -102,7 +108,7 @@ export default function SavedScreen() {
           savedBooks.length === 0 && styles.listContentEmpty,
         ]}
         data={savedBooks}
-        keyExtractor={(book) => book.id}
+        keyExtractor={(book) => book.googleBookId}
         ListEmptyComponent={
           <EmptySaved onExplore={() => router.push('/feed')} />
         }
@@ -118,6 +124,7 @@ export default function SavedScreen() {
                 ? 'A quiet place for books you want to remember.'
                 : `${savedBooks.length} ${savedBooks.length === 1 ? 'book' : 'books'} waiting on your shelf.`}
             </Text>
+            <LibrarySyncNotice style={styles.syncNotice} />
           </View>
         }
         numColumns={2}
@@ -125,7 +132,14 @@ export default function SavedScreen() {
           <SavedBook
             book={item}
             coverHeight={coverHeight}
-            onRemove={() => toggleSaved(item.id)}
+            onRemove={() =>
+              toggleSaved({
+                author: item.author,
+                coverUrl: item.coverUrl,
+                googleBookId: item.googleBookId,
+                title: item.title,
+              } satisfies SaveableBook)
+            }
           />
         )}
         showsVerticalScrollIndicator={false}
@@ -148,6 +162,9 @@ const styles = StyleSheet.create({
   header: {
     paddingBottom: spacing.lg,
     paddingTop: spacing.sm,
+  },
+  syncNotice: {
+    marginTop: spacing.md,
   },
   headerIcon: {
     alignItems: 'center',
@@ -226,13 +243,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
     marginLeft: 3,
-  },
-  metaDot: {
-    backgroundColor: colors.border,
-    borderRadius: 2,
-    height: 3,
-    marginHorizontal: 6,
-    width: 3,
   },
   emptyState: {
     alignItems: 'center',

@@ -25,13 +25,23 @@ expo-env.d.ts
 npm-debug.*
 yarn-debug.*
 yarn-error.*
+expo-web.*.log
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
 
 # macOS
 .DS_Store
 *.pem
 
-# local env files
-.env*.local
+# environment files (commit only the placeholder example)
+.env
+.env.*
+!.env.example
+
+# Firebase/GCP server credentials never belong in the client repository
+*service-account*.json
+serviceAccountKey.json
 
 # local tooling
 .claude/

@@ -11,7 +11,9 @@ import {
 } from 'react-native';
 
 import { PrimaryButton } from '../components/PrimaryButton';
+import { LogoMark } from '../components/LogoMark';
 import { Screen } from '../components/Screen';
+import { getAuthErrorMessage, useAuth } from '../context/AuthContext';
 import { useLibrary } from '../context/LibraryContext';
 import { colors, radii, spacing, typography } from '../theme';
 
@@ -86,7 +88,13 @@ function Field({
 export default function AuthScreen() {
   const params = useLocalSearchParams<{ mode?: string }>();
   const router = useRouter();
-  const { loadDemoAccount, setDisplayName } = useLibrary();
+  const {
+    configurationError,
+    sendPasswordReset,
+    signIn,
+    signUp,
+  } = useAuth();
+  const { setDisplayName } = useLibrary();
   const initialMode = useMemo<AuthMode>(
     () => (params.mode === 'login' ? 'login' : 'signup'),
     [params.mode],
@@ -97,14 +105,18 @@ export default function AuthScreen() {
   const [password, setPassword] = useState('');
   const [passwordHidden, setPasswordHidden] = useState(true);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
   const changeMode = (nextMode: AuthMode) => {
     setMode(nextMode);
     setError('');
+    setNotice('');
   };
 
-  const submit = () => {
+  const submit = async () => {
     Keyboard.dismiss();
+    setNotice('');
 
     if (mode === 'signup' && !name.trim()) {
       setError('Add your name so we know what to call you.');
@@ -120,19 +132,42 @@ export default function AuthScreen() {
     }
 
     setError('');
-    if (mode === 'signup') {
-      setDisplayName(name.trim());
-      router.push('/interests');
-    } else {
-      const emailName = email
-        .split('@')[0]
-        .split(/[._-]+/)
-        .filter(Boolean)
-        .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
-        .join(' ');
-      loadDemoAccount(emailName || 'Reader');
-      router.dismissAll();
-      requestAnimationFrame(() => router.replace('/feed'));
+    setSubmitting(true);
+
+    try {
+      if (mode === 'signup') {
+        await signUp(email, password, name);
+        setDisplayName(name.trim());
+        router.replace('/interests');
+      } else {
+        await signIn(email, password);
+        router.replace('/feed');
+      }
+    } catch (authError) {
+      setError(getAuthErrorMessage(authError));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const resetPassword = async () => {
+    Keyboard.dismiss();
+    setError('');
+    setNotice('');
+
+    if (!email.trim() || !email.includes('@')) {
+      setError('Enter your email address first.');
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      await sendPasswordReset(email);
+      setNotice('Check your inbox for a password reset link.');
+    } catch (authError) {
+      setError(getAuthErrorMessage(authError));
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -157,9 +192,7 @@ export default function AuthScreen() {
         </Pressable>
 
         <View style={styles.intro}>
-          <View style={styles.miniMark}>
-            <Ionicons color={colors.white} name="book-outline" size={18} />
-          </View>
+          <LogoMark size={42} style={styles.miniMark} />
           <Text style={styles.title}>
             {mode === 'signup' ? 'Create your shelf.' : 'Welcome back.'}
           </Text>
@@ -225,19 +258,29 @@ export default function AuthScreen() {
             value={password}
           />
 
-          {error ? (
+          {error || configurationError ? (
             <View accessibilityLiveRegion="polite" style={styles.errorRow}>
               <Ionicons color={colors.danger} name="alert-circle" size={17} />
-              <Text style={styles.errorText}>{error}</Text>
+              <Text style={styles.errorText}>{error || configurationError}</Text>
+            </View>
+          ) : null}
+
+          {notice ? (
+            <View accessibilityLiveRegion="polite" style={styles.noticeRow}>
+              <Ionicons
+                color={colors.success}
+                name="checkmark-circle"
+                size={17}
+              />
+              <Text style={styles.noticeText}>{notice}</Text>
             </View>
           ) : null}
 
           {mode === 'login' ? (
             <Pressable
               accessibilityRole="button"
-              onPress={() =>
-                setError('Password reset will be available in the next version.')
-              }
+              disabled={submitting || Boolean(configurationError)}
+              onPress={resetPassword}
               style={styles.forgotButton}
             >
               <Text style={styles.forgotText}>Forgot password?</Text>
@@ -247,15 +290,21 @@ export default function AuthScreen() {
           <PrimaryButton
             icon="arrow-forward"
             label={mode === 'signup' ? 'Create account' : 'Log in'}
+            loading={submitting}
+            disabled={Boolean(configurationError)}
             onPress={submit}
             style={styles.submit}
           />
         </View>
 
         <View style={styles.demoNote}>
-          <Ionicons color={colors.violet} name="flask-outline" size={17} />
+          <Ionicons
+            color={colors.violet}
+            name="shield-checkmark-outline"
+            size={17}
+          />
           <Text style={styles.demoNoteText}>
-            This is a demo—use any valid details to explore the app.
+            Your password is handled securely by Firebase Authentication.
           </Text>
         </View>
 
@@ -294,14 +343,8 @@ const styles = StyleSheet.create({
     marginTop: spacing.xl,
   },
   miniMark: {
-    alignItems: 'center',
-    backgroundColor: colors.violet,
-    borderRadius: 13,
-    height: 42,
-    justifyContent: 'center',
     marginBottom: spacing.md,
     transform: [{ rotate: '-4deg' }],
-    width: 42,
   },
   title: {
     ...typography.title,
@@ -375,6 +418,21 @@ const styles = StyleSheet.create({
   },
   errorText: {
     color: colors.danger,
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '600',
+    lineHeight: 18,
+  },
+  noticeRow: {
+    alignItems: 'center',
+    backgroundColor: '#EAF5EE',
+    borderRadius: radii.sm,
+    flexDirection: 'row',
+    gap: spacing.xs,
+    padding: spacing.sm,
+  },
+  noticeText: {
+    color: colors.success,
     flex: 1,
     fontSize: 13,
     fontWeight: '600',

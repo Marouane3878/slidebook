@@ -8,6 +8,7 @@ import {
   View,
 } from 'react-native';
 
+import { LogoMark } from '../components/LogoMark';
 import { PrimaryButton } from '../components/PrimaryButton';
 import { Screen } from '../components/Screen';
 import { colors, radii, shadows, spacing, typography } from '../theme';
@@ -15,9 +16,7 @@ import { colors, radii, shadows, spacing, typography } from '../theme';
 function Wordmark() {
   return (
     <View style={styles.wordmark}>
-      <View style={styles.logoMark}>
-        <Ionicons color={colors.white} name="book-outline" size={19} />
-      </View>
+      <LogoMark size={38} style={styles.logoMark} />
       <Text style={styles.logoText}>slidebook</Text>
     </View>
   );
@@ -133,13 +132,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   logoMark: {
-    alignItems: 'center',
-    backgroundColor: colors.violet,
-    borderRadius: 12,
-    height: 38,
-    justifyContent: 'center',
     transform: [{ rotate: '-4deg' }],
-    width: 38,
   },
   logoText: {
     color: colors.ink,
@@ -226,7 +219,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   coverEyebrow: {
-    color: '#D9CDFF',
+    color: '#F8E7CA',
     fontSize: 8,
     fontWeight: '800',
     letterSpacing: 1.4,
@@ -275,7 +268,7 @@ const styles = StyleSheet.create({
     marginTop: 11,
   },
   coverAuthor: {
-    color: '#D9CDFF',
+    color: '#F8E7CA',
     fontSize: 8,
     fontWeight: '700',
     letterSpacing: 1,
